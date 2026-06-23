@@ -29,8 +29,8 @@ async def enviar_telegram(texto):
 async def loop_principal():
     global gains_acumulados, loss_acumulados, minutos_passados_relatorio
     
-    print("⚡ Motor Forçado Inicializado.")
-    await enviar_telegram("🔄 *Bot Conectado! Monitorando M5...*")
+    print("⚡ Motor MHI Otimizado Inicializado.")
+    await enviar_telegram("🔄 *Bot Atualizado! Monitorando M5 e Relatório de 1h Ativo...*")
 
     estados = {ativo: {"fase": "aguardando", "direcao": "COMPRA (CALL) 🟢"} for ativo in ATIVOS}
     ultimo_minuto_rodado = -1
@@ -40,23 +40,27 @@ async def loop_principal():
         minuto = agora.minute
         segundo = agora.second
 
-        # Controle do Relatório a cada 8 horas (480 minutos)
-        if minuto != ultimo_minuto_rodado and minuto % 1 == 0:
+        # Controle do Relatório de 1h (60 minutos)
+        if minuto != ultimo_minuto_rodado:
             minutos_passados_relatorio += 1
             ultimo_minuto_rodado = minuto
             
-            if minutos_passados_relatorio >= 480:
+            if minutos_passados_relatorio >= 60:
                 total = gains_acumulados + loss_acumulados
                 win_rate = (gains_acumulados / total * 100) if total > 0 else 0
                 texto_relatorio = (
-                    f"📊 *RELATÓRIO DE PERFORMANCE*\n"
-                    f"📈 *Total:* {total} | 🟢 *Gains:* {gains_acumulados} | 🔴 *Loss:* {loss_acumulados}\n"
-                    f"🎯 *Assertividade:* {win_rate:.1f}%"
+                    f"📊 *RELATÓRIO DE PERFORMANCE HORA EM HORA*\n"
+                    f"━━━━━━━━━━━━━━━━━━━━\n"
+                    f"📈 *Total de Sinais:* {total}\n"
+                    f"🟢 *Gains:* {gains_acumulados}\n"
+                    f"🔴 *Loss:* {loss_acumulados}\n"
+                    f"🎯 *Assertividade:* {win_rate:.1f}%\n"
+                    f"━━━━━━━━━━━━━━━━━━━━"
                 )
                 await enviar_telegram(texto_relatorio)
                 gains_acumulados, loss_acumulados, minutos_passados_relatorio = 0, 0, 0
 
-        # 1. Pré-Alerta (Nos minutos terminados em 4 e 9, aos 30 segundos)
+        # 1. Pré-Alerta (Minutos 4 e 9, aos 30 segundos)
         if (minuto % 5 == 4) and segundo == 30:
             for ativo in ATIVOS:
                 estados[ativo]["fase"] = "alerta"
@@ -68,7 +72,7 @@ async def loop_principal():
                 )
             await asyncio.sleep(2)
 
-        # 2. Confirmação (Nos minutos terminados em 4 e 9, aos 58 segundos)
+        # 2. Confirmação (Minutos 4 e 9, aos 58 segundos)
         elif (minuto % 5 == 4) and segundo == 58:
             for ativo in ATIVOS:
                 if estados[ativo]["fase"] == "alerta":
