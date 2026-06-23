@@ -29,27 +29,31 @@ async def enviar_telegram(texto):
 async def loop_principal():
     global gains_acumulados, loss_acumulados, minutos_passados_relatorio
     
-    print("⚡ Motor MHI Otimizado Inicializado.")
-    await enviar_telegram("🔄 *Bot Atualizado! Monitorando M5 e Relatório de 1h Ativo...*")
+    print("⚡ Motor Ultra-Sincronizado Ativo.")
+    await enviar_telegram("🔄 *Bot Reconectado com Sistema Anti-Travamento! M5 Ativo...*")
 
-    estados = {ativo: {"fase": "aguardando", "direcao": "COMPRA (CALL) 🟢"} for ativo in ATIVOS}
-    ultimo_minuto_rodado = -1
+    estados = {ativo: {"direcao": "COMPRA (CALL) 🟢"} for ativo in ATIVOS}
+    
+    # Travas de controle para evitar repetições no mesmo minuto
+    ultimo_minuto_alerta = -1
+    ultimo_minuto_confirmacao = -1
+    ultimo_minuto_relatorio = -1
 
     while True:
         agora = obter_hora_brasil()
         minuto = agora.minute
         segundo = agora.second
 
-        # Controle do Relatório de 1h (60 minutos)
-        if minuto != ultimo_minuto_rodado:
+        # 1. Controle do Relatório de 1h (A cada 60 minutos cheios)
+        if minuto != ultimo_minuto_relatorio:
             minutos_passados_relatorio += 1
-            ultimo_minuto_rodado = minuto
+            ultimo_minuto_relatorio = minuto
             
             if minutos_passados_relatorio >= 60:
                 total = gains_acumulados + loss_acumulados
                 win_rate = (gains_acumulados / total * 100) if total > 0 else 0
                 texto_relatorio = (
-                    f"📊 *RELATÓRIO DE PERFORMANCE HORA EM HORA*\n"
+                    f"📊 *RELATÓRIO DE PERFORMANCE (1H)*\n"
                     f"━━━━━━━━━━━━━━━━━━━━\n"
                     f"📈 *Total de Sinais:* {total}\n"
                     f"🟢 *Gains:* {gains_acumulados}\n"
@@ -60,37 +64,36 @@ async def loop_principal():
                 await enviar_telegram(texto_relatorio)
                 gains_acumulados, loss_acumulados, minutos_passados_relatorio = 0, 0, 0
 
-        # 1. Pré-Alerta (Minutos 4 e 9, aos 30 segundos)
-        if (minuto % 5 == 4) and segundo == 30:
-            for ativo in ATIVOS:
-                estados[ativo]["fase"] = "alerta"
-                estados[ativo]["direcao"] = "COMPRA (CALL) 🟢" if random.random() > 0.5 else "VENDA (PUT) 🔴"
-                ativo_f = f"{ativo[:3]}/{ativo[3:]}"
-                
-                await enviar_telegram(
-                    f"🚨 *PRÉ-ALERTA M5*\n🔹 *Ativo:* {ativo_f}\n🎯 *Ação:* PREPARAR {estados[ativo]['direcao']}"
-                )
-            await asyncio.sleep(2)
+        # 2. Pré-Alerta (Dispara na janela dos 30 aos 45 segundos do minuto que termina em 4 ou 9)
+        if (minuto % 5 == 4) and (30 <= segundo <= 45):
+            if minuto != ultimo_minuto_alerta:
+                for ativo in ATIVOS:
+                    estados[ativo]["direcao"] = "COMPRA (CALL) 🟢" if random.random() > 0.5 else "VENDA (PUT) 🔴"
+                    ativo_f = f"{ativo[:3]}/{ativo[3:]}"
+                    
+                    await enviar_telegram(
+                        f"🚨 *PRÉ-ALERTA M5*\n🔹 *Ativo:* {ativo_f}\n🎯 *Ação:* PREPARAR {estados[ativo]['direcao']}"
+                    )
+                ultimo_minuto_alerta = minuto
 
-        # 2. Confirmação (Minutos 4 e 9, aos 58 segundos)
-        elif (minuto % 5 == 4) and segundo == 58:
-            for ativo in ATIVOS:
-                if estados[ativo]["fase"] == "alerta":
+        # 3. Confirmação (Dispara na janela dos 55 aos 59 segundos do minuto que termina em 4 ou 9)
+        if (minuto % 5 == 4) and (55 <= segundo <= 59):
+            if minuto != ultimo_minuto_confirmacao:
+                for ativo in ATIVOS:
                     ativo_f = f"{ativo[:3]}/{ativo[3:]}"
                     minuto_entrada = (agora + timedelta(minutes=1)).strftime("%H:%M")
                     
                     await enviar_telegram(
-                        f"⚡ *ENTRADA CONFIRMADA*\n🎯 *Ativo:* {ativo_f}\n⏱ *Hora:* {minuto_entrada} (M5)"
+                        f"⚡ *ENTRADA CONFIRMADA*\n🎯 *Ativo:* {ativo_f}\n⏱ *Hora:* {minuto_entrada} (M5)\n🚀 *Direção:* {estados[ativo]['direcao']}"
                     )
                     
                     if random.random() <= 0.85:
                         gains_acumulados += 1
                     else:
                         loss_acumulados += 1
-                        
-                    estados[ativo]["fase"] = "aguardando"
-            await asyncio.sleep(2)
+                ultimo_minuto_confirmacao = minuto
 
+        # Delay curto para manter a precisão sem sobrecarregar
         await asyncio.sleep(0.5)
 
 if __name__ == "__main__":
