@@ -1,7 +1,9 @@
 import asyncio
+import os
 import random
 from datetime import datetime, timedelta
 import aiohttp
+from aiohttp import web
 
 TELEGRAM_TOKEN = "8206760840:AAHHHe3oYHol-xJxXpdfHmDXkvY-mBRUmqs"
 CHAT_ID = "@sinaisbinariosdomestre" 
@@ -27,12 +29,10 @@ async def enviar_telegram(texto):
 
 async def loop_principal():
     global gains_acumulados, loss_acumulados, minutos_passados_relatorio
-    
     print("⚡ Motor Bot Ativo.")
-    await enviar_telegram("🔄 *Bot Iniciado com sucesso! Monitorando o mercado...*")
+    await enviar_telegram("🔄 *Bot Iniciado com Anti-Desligamento!*")
 
     estados = {ativo: {"direcao": "COMPRA (CALL) 🟢"} for ativo in ATIVOS}
-    
     ultimo_minuto_alerta = -1
     ultimo_minuto_confirmacao = -1
     ultimo_minuto_relatorio = -1
@@ -42,50 +42,42 @@ async def loop_principal():
         minuto = agora.minute
         segundo = agora.second
 
-        # 1. Relatório
         if minuto != ultimo_minuto_relatorio:
             minutos_passados_relatorio += 1
             ultimo_minuto_relatorio = minuto
-            
             if minutos_passados_relatorio >= 60:
                 total = gains_acumulados + loss_acumulados
                 win_rate = (gains_acumulados / total * 100) if total > 0 else 0
-                texto_relatorio = (
-                    f"📊 *RELATÓRIO DE PERFORMANCE (1H)*\n"
-                    f"━━━━━━━━━━━━━━━━━━━━\n"
-                    f"📈 *Total de Sinais:* {total}\n"
-                    f"🟢 *Gains:* {gains_acumulados}\n"
-                    f"🔴 *Loss:* {loss_acumulados}\n"
-                    f"🎯 *Assertividade:* {win_rate:.1f}%\n"
-                    f"━━━━━━━━━━━━━━━━━━━━"
-                )
-                await enviar_telegram(texto_relatorio)
+                await enviar_telegram(f"📊 *RELATÓRIO (1H)*\n━━━━━━━━━━━━━━━━━━━━\n📈 *Sinais:* {total}\n🟢 *Gains:* {gains_acumulados}\n🔴 *Loss:* {loss_acumulados}\n🎯 *Assertividade:* {win_rate:.1f}%\n━━━━━━━━━━━━━━━━━━━━")
                 gains_acumulados, loss_acumulados, minutos_passados_relatorio = 0, 0, 0
 
-        # 2. Pré-Alerta
         if (minuto % 5 == 4) and (30 <= segundo <= 45):
             if minuto != ultimo_minuto_alerta:
                 for ativo in ATIVOS:
                     estados[ativo]["direcao"] = "COMPRA (CALL) 🟢" if random.random() > 0.5 else "VENDA (PUT) 🔴"
-                    ativo_f = f"{ativo[:3]}/{ativo[3:]}"
-                    await enviar_telegram(f"🚨 *PRÉ-ALERTA M5*\n🔹 *Ativo:* {ativo_f}\n🎯 *Ação:* PREPARAR {estados[ativo]['direcao']}")
+                    await enviar_telegram(f"🚨 *PRÉ-ALERTA M5*\n🔹 *Ativo:* {ativo[:3]}/{ativo[3:]}\n🎯 *Ação:* PREPARAR {estados[ativo]['direcao']}")
                 ultimo_minuto_alerta = minuto
 
-        # 3. Confirmação
         if (minuto % 5 == 4) and (55 <= segundo <= 59):
             if minuto != ultimo_minuto_confirmacao:
                 for ativo in ATIVOS:
-                    ativo_f = f"{ativo[:3]}/{ativo[3:]}"
                     minuto_entrada = (agora + timedelta(minutes=1)).strftime("%H:%M")
-                    await enviar_telegram(f"⚡ *ENTRADA CONFIRMADA*\n🎯 *Ativo:* {ativo_f}\n⏱ *Hora:* {minuto_entrada} (M5)\n🚀 *Direção:* {estados[ativo]['direcao']}")
-                    
-                    if random.random() <= 0.85:
-                        gains_acumulados += 1
-                    else:
-                        loss_acumulados += 1
+                    await enviar_telegram(f"⚡ *ENTRADA CONFIRMADA*\n🎯 *Ativo:* {ativo[:3]}/{ativo[3:]}\n⏱ *Hora:* {minuto_entrada} (M5)\n🚀 *Direção:* {estados[ativo]['direcao']}")
+                    if random.random() <= 0.85: gains_acumulados += 1
+                    else: loss_acumulados += 1
                 ultimo_minuto_confirmacao = minuto
 
         await asyncio.sleep(0.5)
 
+# Servidor Web para a Render/UptimeRobot
+async def handle_ping(request):
+    return web.Response(text="Online")
+
+async def start_tasks(app):
+    app['bot_task'] = asyncio.create_task(loop_principal())
+
 if __name__ == "__main__":
-    asyncio.run(loop_principal())
+    app = web.Application()
+    app.router.add_get('/', handle_ping)
+    app.on_startup.append(start_tasks)
+    web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
