@@ -30,7 +30,7 @@ async def enviar_telegram(texto):
 async def loop_principal():
     global gains_acumulados, loss_acumulados, minutos_passados_relatorio
     print("⚡ Motor Bot Ativo.")
-    await enviar_telegram("🔄 *Bot Iniciado com Anti-Desligamento!*")
+    await enviar_telegram("🔄 *Bot Inicializado! Monitoramento Multi-Ativos Ativo...*")
 
     estados = {ativo: {"direcao": "COMPRA (CALL) 🟢"} for ativo in ATIVOS}
     ultimo_minuto_alerta = -1
@@ -42,34 +42,46 @@ async def loop_principal():
         minuto = agora.minute
         segundo = agora.second
 
+        # 1. Relatório de 1h
         if minuto != ultimo_minuto_relatorio:
             minutos_passados_relatorio += 1
             ultimo_minuto_relatorio = minuto
             if minutos_passados_relatorio >= 60:
                 total = gains_acumulados + loss_acumulados
                 win_rate = (gains_acumulados / total * 100) if total > 0 else 0
-                await enviar_telegram(f"📊 *RELATÓRIO (1H)*\n━━━━━━━━━━━━━━━━━━━━\n📈 *Sinais:* {total}\n🟢 *Gains:* {gains_acumulados}\n🔴 *Loss:* {loss_acumulados}\n🎯 *Assertividade:* {win_rate:.1f}%\n━━━━━━━━━━━━━━━━━━━━")
+                await enviar_telegram(f"📊 *RELATÓRIO DE PERFORMANCE (1H)*\n━━━━━━━━━━━━━━━━━━━━\n📈 *Sinais:* {total}\n🟢 *Gains:* {gains_acumulados}\n🔴 *Loss:* {loss_acumulados}\n🎯 *Assertividade:* {win_rate:.1f}%\n━━━━━━━━━━━━━━━━━━━━")
                 gains_acumulados, loss_acumulados, minutos_passados_relatorio = 0, 0, 0
 
+        # 2. Pré-Alerta Unificado (Minutos 4 e 9, aos 30 segundos)
         if (minuto % 5 == 4) and (30 <= segundo <= 45):
             if minuto != ultimo_minuto_alerta:
+                linhas_alerta = []
                 for ativo in ATIVOS:
                     estados[ativo]["direcao"] = "COMPRA (CALL) 🟢" if random.random() > 0.5 else "VENDA (PUT) 🔴"
-                    await enviar_telegram(f"🚨 *PRÉ-ALERTA M5*\n🔹 *Ativo:* {ativo[:3]}/{ativo[3:]}\n🎯 *Ação:* PREPARAR {estados[ativo]['direcao']}")
+                    linhas_alerta.append(f"🔹 *{ativo[:3]}/{ativo[3:]}*: Preparar {estados[ativo]['direcao']}")
+                
+                texto_alerta = "🚨 *PRÉ-ALERTA DE ENTRADA M5*\n\n" + "\n".join(linhas_alerta) + "\n\n⚠️ _Aguarde a confirmação na virada do minuto!_"
+                await enviar_telegram(texto_alerta)
                 ultimo_minuto_alerta = minuto
 
+        # 3. Confirmação Unificada (Minutos 4 e 9, aos 55 segundos)
         if (minuto % 5 == 4) and (55 <= segundo <= 59):
             if minuto != ultimo_minuto_confirmacao:
+                linhas_confirmacao = []
+                minuto_entrada = (agora + timedelta(minutes=1)).strftime("%H:%M")
+                
                 for ativo in ATIVOS:
-                    minuto_entrada = (agora + timedelta(minutes=1)).strftime("%H:%M")
-                    await enviar_telegram(f"⚡ *ENTRADA CONFIRMADA*\n🎯 *Ativo:* {ativo[:3]}/{ativo[3:]}\n⏱ *Hora:* {minuto_entrada} (M5)\n🚀 *Direção:* {estados[ativo]['direcao']}")
+                    linhas_confirmacao.append(f"⚡ *{ativo[:3]}/{ativo[3:]}* ➔ {estados[ativo]['direcao']}")
                     if random.random() <= 0.85: gains_acumulados += 1
                     else: loss_acumulados += 1
+                
+                texto_confirmacao = f"⚡ *ENTRADAS CONFIRMADAS M5*\n⏱ *Entrada:* {minuto_entrada}\n\n" + "\n".join(linhas_confirmacao) + "\n\n🚀 _Execute na virada do minuto!_"
+                await enviar_telegram(texto_confirmacao)
                 ultimo_minuto_confirmacao = minuto
 
         await asyncio.sleep(0.5)
 
-# Servidor Web para a Render/UptimeRobot
+# Servidor Web para Render e UptimeRobot
 async def handle_ping(request):
     return web.Response(text="Online")
 
